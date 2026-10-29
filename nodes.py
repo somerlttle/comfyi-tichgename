@@ -9,9 +9,17 @@ Author: somerlttle
 
 import os
 import glob
+import tempfile
+from datetime import datetime
+
 import numpy as np
 import torch
 from PIL import Image, ImageOps
+
+try:
+    import folder_paths  # provided by ComfyUI at runtime
+except Exception:  # pragma: no cover - keeps module importable outside ComfyUI
+    folder_paths = None
 
 
 # ---------------------------------------------------------------------------
@@ -192,15 +200,100 @@ class LoadImageAndTextByPath:
         return (image, mask, text)
 
 
+# ---------------------------------------------------------------------------
+# Node 4: save text to a file with custom prefix / suffix / path
+# ---------------------------------------------------------------------------
+class SaveTextFile:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "text": ("STRING", {"multiline": True, "default": "", "tooltip": "Text content to save"}),
+                "output_dir": (
+                    "STRING",
+                    {"multiline": False, "default": "", "tooltip": "Save folder; empty = ComfyUI temp dir"},
+                ),
+                "filename_prefix": (
+                    "STRING",
+                    {"multiline": False, "default": "ComfyUI", "tooltip": "Filename prefix"},
+                ),
+                "filename_suffix": (
+                    "STRING",
+                    {"multiline": False, "default": "", "tooltip": "Filename suffix (appended before extension)"},
+                ),
+                "extension": (
+                    "STRING",
+                    {"multiline": False, "default": "txt", "tooltip": "File extension without dot"},
+                ),
+                "encoding": (["utf-8", "utf-8-sig", "gbk", "latin-1"], {"default": "utf-8"}),
+                "add_timestamp": (
+                    "BOOLEAN",
+                    {"default": True, "tooltip": "Append YYYYMMDD-HHMMSS to keep filenames unique"},
+                ),
+            },
+            "optional": {
+                "overwrite": (
+                    "BOOLEAN",
+                    {"default": False, "tooltip": "If false, append _1/_2... when the file already exists"},
+                ),
+            },
+        }
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("file_path",)
+    FUNCTION = "save_text"
+    OUTPUT_NODE = True
+    CATEGORY = "path loader"
+
+    def save_text(self, text, output_dir, filename_prefix, filename_suffix,
+                  extension, encoding, add_timestamp, overwrite=False):
+        # resolve output directory
+        if output_dir and output_dir.strip():
+            out_dir = os.path.abspath(output_dir.strip())
+        elif folder_paths is not None:
+            out_dir = folder_paths.get_temp_directory()
+        else:
+            out_dir = tempfile.gettempdir()
+        os.makedirs(out_dir, exist_ok=True)
+
+        # build base filename: prefix [+ _timestamp] + suffix
+        name = filename_prefix or ""
+        if add_timestamp:
+            ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+            name = f"{name}_{ts}" if name else ts
+        name = name + (filename_suffix or "")
+
+        ext = extension.strip() or "txt"
+        if not ext.startswith("."):
+            ext = "." + ext
+        base_path = os.path.join(out_dir, name + ext)
+
+        # avoid overwriting existing files unless explicitly allowed
+        final_path = base_path
+        if os.path.exists(final_path) and not overwrite:
+            stem, ext2 = os.path.splitext(base_path)
+            i = 1
+            while os.path.exists(f"{stem}_{i}{ext2}"):
+                i += 1
+            final_path = f"{stem}_{i}{ext2}"
+
+        with open(final_path, "w", encoding=encoding) as f:
+            f.write(text if isinstance(text, str) else str(text))
+
+        return (final_path,)
+
+
 # Expose node list for __init__.py
 NODE_CLASS_MAPPINGS = {
     "LoadImageByPath": LoadImageByPath,
     "LoadTextByPath": LoadTextByPath,
     "LoadImageAndTextByPath": LoadImageAndTextByPath,
+    "SaveTextFile": SaveTextFile,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "LoadImageByPath": "Load Image By Path (somerlttle)",
     "LoadTextByPath": "Load Text By Path (somerlttle)",
     "LoadImageAndTextByPath": "Load Image And Text By Path (somerlttle)",
+    "SaveTextFile": "Save Text File (somerlttle)",
 }
