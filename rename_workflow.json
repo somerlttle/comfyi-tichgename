@@ -6,7 +6,7 @@
       "id": 1,
       "type": "RenameFolderFiles",
       "pos": [220, 200],
-      "size": {"0": 400, "1": 320},
+      "size": {"0": 420, "1": 360},
       "flags": {},
       "order": 0,
       "mode": 0,
@@ -22,8 +22,10 @@
         "a",
         "_",
         1,
+        2,
+        "D:\\ai-toolkit-easy2use-portable\\datasets\\11",
         "",
-        "",
+        true,
         true,
         true
       ]
