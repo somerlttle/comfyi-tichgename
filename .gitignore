@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual envs
+venv/
+.venv/
+env/
+
+# ComfyUI / model caches
+*.log
+.DS_Store
+Thumbs.db
+
+# Local test data (do not commit real images/texts)
+input/
+output/
+tests/samples/
+*.png
+*.jpg
+*.jpeg
+*.txt
