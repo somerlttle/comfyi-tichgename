@@ -1,0 +1,36 @@
+{
+  "last_node_id": 1,
+  "last_link_id": 0,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "RenameFolderFiles",
+      "pos": [220, 200],
+      "size": {"0": 380, "1": 290},
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {"name": "report", "type": "STRING", "links": null, "slot_index": 0}
+      ],
+      "properties": {
+        "Node name for S&R": "RenameFolderFiles"
+      },
+      "widgets_values": [
+        "D:\\ai-toolkit-easy2use-portable\\datasets\\8_苗条美女1",
+        "a",
+        "_",
+        1,
+        "",
+        true,
+        true
+      ]
+    }
+  ],
+  "links": [],
+  "groups": [],
+  "config": {},
+  "extra": {},
+  "version": 0.4
+}
