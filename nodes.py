@@ -234,6 +234,15 @@ class SaveTextFile:
                     "BOOLEAN",
                     {"default": True, "tooltip": "Append YYYYMMDD-HHMMSS to keep filenames unique"},
                 ),
+                "add_counter": (
+                    "BOOLEAN",
+                    {"default": True, "tooltip": "在文件名后追加数字后缀（如 _1），并作为重名计数器的起点"},
+                ),
+                "counter_start": (
+                    "INT",
+                    {"default": 1, "min": 0, "max": 999999, "step": 1,
+                     "tooltip": "数字后缀的起始值（后缀从几开始）；重名时计数器也从该值递增"},
+                ),
             },
             "optional": {
                 "overwrite": (
@@ -250,7 +259,8 @@ class SaveTextFile:
     CATEGORY = "路径加载"
 
     def save_text(self, text, output_dir, filename_prefix, filename_suffix,
-                  middle_char, extension, encoding, add_timestamp, overwrite=False):
+                  middle_char, extension, encoding, add_timestamp,
+                  add_counter, counter_start, overwrite=False):
         # resolve output directory
         if output_dir and output_dir.strip():
             out_dir = os.path.abspath(output_dir.strip())
@@ -269,21 +279,28 @@ class SaveTextFile:
             parts.append(datetime.now().strftime("%Y%m%d-%H%M%S"))
         if filename_suffix:
             parts.append(filename_suffix)
-        name = sep.join(parts)
+        base_name = sep.join(parts)
 
         ext = extension.strip() or "txt"
         if not ext.startswith("."):
             ext = "." + ext
-        base_path = os.path.join(out_dir, name + ext)
+
+        # optional numeric suffix (数字后缀 / 计数器)
+        candidate = base_name
+        if add_counter:
+            cnt = str(int(counter_start))
+            candidate = (candidate + sep + cnt) if candidate else cnt
+
+        base_path = os.path.join(out_dir, candidate + ext)
 
         # avoid overwriting existing files unless explicitly allowed
         final_path = base_path
         if os.path.exists(final_path) and not overwrite:
-            stem, ext2 = os.path.splitext(base_path)
-            i = 1
-            while os.path.exists(f"{stem}_{i}{ext2}"):
+            # search for a free "base_name [sep] N" starting from counter_start
+            i = int(counter_start)
+            while os.path.exists(os.path.join(out_dir, f"{base_name}{sep}{i}{ext}")):
                 i += 1
-            final_path = f"{stem}_{i}{ext2}"
+            final_path = os.path.join(out_dir, f"{base_name}{sep}{i}{ext}")
 
         with open(final_path, "w", encoding=encoding) as f:
             f.write(text if isinstance(text, str) else str(text))
