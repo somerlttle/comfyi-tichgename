@@ -7,14 +7,14 @@
 
 ## 节点一览
 
-所有节点位于 `path loader` 分类下。
+所有节点位于 `路径加载` 分类下。
 
 | 节点 | 输入 | 输出 | 说明 |
 | --- | --- | --- | --- |
-| **Load Image By Path** | `image_path` (STRING)<br>`load_cap` (INT, 可选) | `IMAGE`, `MASK` | 支持单文件、目录（加载目录内全部图片，按文件名排序）或 glob 通配符（如 `D:/imgs/*.png`）；`load_cap=0` 表示不限数量 |
-| **Load Text By Path** | `text_path` (STRING)<br>`strip_newline` (BOOLEAN, 可选) | `STRING` | 按路径读取 `.txt` 文本，自动尝试 `utf-8` / `gbk` 等编码，可选去除末尾换行 |
-| **Load Image And Text By Path** | `image_path` (STRING)<br>`text_path` (STRING)<br>`strip_newline` (BOOLEAN, 可选) | `IMAGE`, `MASK`, `STRING` | 一次性加载图像与文本，等价于上面两个节点合并 |
-| **Save Text File** | `text` (STRING, 多行)<br>`output_dir` (STRING, 保存路径)<br>`filename_prefix` (STRING)<br>`filename_suffix` (STRING)<br>`extension` (STRING, 默认 `txt`)<br>`encoding` (下拉: `utf-8`/`utf-8-sig`/`gbk`/`latin-1`)<br>`add_timestamp` (BOOLEAN, 默认 true)<br>`overwrite` (BOOLEAN, 可选) | `STRING` (`file_path`) | 把文本按「前缀[+时间戳]后缀.扩展名」保存为文件；`output_dir` 留空则用 ComfyUI 临时目录；同名文件自动加 `_1`/`_2` 后缀（除非 `overwrite=true`）；输出完整路径便于串联 |
+| **按路径加载图像** | `image_path` (STRING)<br>`load_cap` (INT, 可选) | `IMAGE`, `MASK` | 支持单文件、目录（加载目录内全部图片，按文件名排序）或 glob 通配符（如 `D:/imgs/*.png`）；`load_cap=0` 表示不限数量 |
+| **按路径加载文本** | `text_path` (STRING)<br>`strip_newline` (BOOLEAN, 可选) | `STRING` | 按路径读取 `.txt` 文本，自动尝试 `utf-8` / `gbk` 等编码，可选去除末尾换行 |
+| **按路径加载图像与文本** | `image_path` (STRING)<br>`text_path` (STRING)<br>`strip_newline` (BOOLEAN, 可选) | `IMAGE`, `MASK`, `STRING` | 一次性加载图像与文本，等价于上面两个节点合并 |
+| **保存文本文件** | `text` (STRING, 多行)<br>`output_dir` (STRING, 保存路径)<br>`filename_prefix` (STRING, 前缀)<br>`filename_suffix` (STRING, 后缀)<br>`middle_char` (STRING, 中间字符, 默认 `_`)<br>`extension` (STRING, 默认 `txt`)<br>`encoding` (下拉: `utf-8`/`utf-8-sig`/`gbk`/`latin-1`)<br>`add_timestamp` (BOOLEAN, 默认 true)<br>`overwrite` (BOOLEAN, 可选) | `STRING` (`file_path`) | 把文本按「前缀 [中间字符] [时间戳] [中间字符] 后缀.扩展名」保存；`middle_char` 即前缀/时间戳/后缀之间的连接符（如 `_` 或 `-`，留空则无连接符）；`output_dir` 留空则用 ComfyUI 临时目录；同名文件自动加 `_1`/`_2` 后缀（除非 `overwrite=true`）；输出完整路径便于串联 |
 
 图像输出格式与 ComfyUI 内置 `LoadImage` 完全一致：`IMAGE` 为 `float32`、形状 `[B, H, W, 3]`、范围 `0..1`；`MASK` 取 alpha 通道（无 alpha 时全 0，即完全不透明）。
 
@@ -35,7 +35,7 @@ git clone https://github.com/somerlttle/comfyi-tichgename.git
 pip install -r requirements.txt
 ```
 
-重启 ComfyUI 后，在节点列表中搜索 `Load Image By Path` / `Load Text By Path` 即可。
+重启 ComfyUI 后，在节点列表中搜索 `按路径加载图像` / `按路径加载文本` / `保存文本文件` 即可。
 
 ## 使用示例
 

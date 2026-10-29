@@ -108,7 +108,7 @@ class LoadImageByPath:
     RETURN_TYPES = ("IMAGE", "MASK")
     RETURN_NAMES = ("image", "mask")
     FUNCTION = "load_image"
-    CATEGORY = "path loader"
+    CATEGORY = "路径加载"
 
     def load_image(self, image_path, load_cap=0):
         paths = _resolve_image_paths(image_path)
@@ -152,7 +152,7 @@ class LoadTextByPath:
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("text",)
     FUNCTION = "load_text"
-    CATEGORY = "path loader"
+    CATEGORY = "路径加载"
 
     def load_text(self, text_path, strip_newline=True):
         if not os.path.isfile(text_path):
@@ -188,7 +188,7 @@ class LoadImageAndTextByPath:
     RETURN_TYPES = ("IMAGE", "MASK", "STRING")
     RETURN_NAMES = ("image", "mask", "text")
     FUNCTION = "load_both"
-    CATEGORY = "path loader"
+    CATEGORY = "路径加载"
 
     def load_both(self, image_path, text_path, strip_newline=True):
         img_node = LoadImageByPath()
@@ -221,6 +221,10 @@ class SaveTextFile:
                     "STRING",
                     {"multiline": False, "default": "", "tooltip": "Filename suffix (appended before extension)"},
                 ),
+                "middle_char": (
+                    "STRING",
+                    {"multiline": False, "default": "_", "tooltip": "自定义中间字符：前缀/时间戳/后缀之间的连接符，例如 _ 或 -"},
+                ),
                 "extension": (
                     "STRING",
                     {"multiline": False, "default": "txt", "tooltip": "File extension without dot"},
@@ -243,10 +247,10 @@ class SaveTextFile:
     RETURN_NAMES = ("file_path",)
     FUNCTION = "save_text"
     OUTPUT_NODE = True
-    CATEGORY = "path loader"
+    CATEGORY = "路径加载"
 
     def save_text(self, text, output_dir, filename_prefix, filename_suffix,
-                  extension, encoding, add_timestamp, overwrite=False):
+                  middle_char, extension, encoding, add_timestamp, overwrite=False):
         # resolve output directory
         if output_dir and output_dir.strip():
             out_dir = os.path.abspath(output_dir.strip())
@@ -256,12 +260,16 @@ class SaveTextFile:
             out_dir = tempfile.gettempdir()
         os.makedirs(out_dir, exist_ok=True)
 
-        # build base filename: prefix [+ _timestamp] + suffix
-        name = filename_prefix or ""
+        # build base filename: prefix [sep timestamp] [sep suffix]
+        sep = middle_char or ""
+        parts = []
+        if filename_prefix:
+            parts.append(filename_prefix)
         if add_timestamp:
-            ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-            name = f"{name}_{ts}" if name else ts
-        name = name + (filename_suffix or "")
+            parts.append(datetime.now().strftime("%Y%m%d-%H%M%S"))
+        if filename_suffix:
+            parts.append(filename_suffix)
+        name = sep.join(parts)
 
         ext = extension.strip() or "txt"
         if not ext.startswith("."):
@@ -292,8 +300,8 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "LoadImageByPath": "Load Image By Path (somerlttle)",
-    "LoadTextByPath": "Load Text By Path (somerlttle)",
-    "LoadImageAndTextByPath": "Load Image And Text By Path (somerlttle)",
-    "SaveTextFile": "Save Text File (somerlttle)",
+    "LoadImageByPath": "按路径加载图像",
+    "LoadTextByPath": "按路径加载文本",
+    "LoadImageAndTextByPath": "按路径加载图像与文本",
+    "SaveTextFile": "保存文本文件",
 }
