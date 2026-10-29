@@ -6,7 +6,7 @@
       "id": 1,
       "type": "RenameFolderFiles",
       "pos": [220, 200],
-      "size": {"0": 380, "1": 290},
+      "size": {"0": 400, "1": 320},
       "flags": {},
       "order": 0,
       "mode": 0,
@@ -22,6 +22,7 @@
         "a",
         "_",
         1,
+        "",
         "",
         true,
         true

@@ -328,6 +328,11 @@ class SaveTextFile:
                 ),
             },
             "optional": {
+                "save_name": (
+                    "STRING",
+                    {"multiline": False, "default": "",
+                     "tooltip": "精确文件名(可选)：填了就直接用此名(自动去扩展名)，覆盖 前缀/时间戳/计数 规则；可接上游 file_name 实现逐文件精确命名"},
+                ),
                 "overwrite": (
                     "BOOLEAN",
                     {"default": False, "tooltip": "If false, append _1/_2... when the file already exists"},
@@ -343,7 +348,7 @@ class SaveTextFile:
 
     def save_text(self, text, output_dir, filename_prefix, filename_suffix,
                   middle_char, extension, encoding, add_timestamp,
-                  add_counter, counter_start, overwrite=False):
+                  add_counter, counter_start, overwrite=False, save_name=""):
         # resolve output directory
         if output_dir and output_dir.strip():
             out_dir = os.path.abspath(output_dir.strip())
@@ -353,16 +358,23 @@ class SaveTextFile:
             out_dir = tempfile.gettempdir()
         os.makedirs(out_dir, exist_ok=True)
 
-        # build base filename: prefix [sep timestamp] [sep suffix]
-        sep = middle_char or ""
-        parts = []
-        if filename_prefix:
-            parts.append(filename_prefix)
-        if add_timestamp:
-            parts.append(datetime.now().strftime("%Y%m%d-%H%M%S"))
-        if filename_suffix:
-            parts.append(filename_suffix)
-        base_name = sep.join(parts)
+        # build base filename
+        save_name = (save_name or "").strip()
+        if save_name:
+            # easy_use 风格：精确文件名，直接覆盖 前缀/时间戳/计数 规则
+            base_name = os.path.splitext(save_name)[0]
+            add_timestamp = False
+            add_counter = False
+        else:
+            sep = middle_char or ""
+            parts = []
+            if filename_prefix:
+                parts.append(filename_prefix)
+            if add_timestamp:
+                parts.append(datetime.now().strftime("%Y%m%d-%H%M%S"))
+            if filename_suffix:
+                parts.append(filename_suffix)
+            base_name = sep.join(parts)
 
         ext = extension.strip() or "txt"
         if not ext.startswith("."):
@@ -420,6 +432,11 @@ class RenameFolderFiles:
                 ),
             },
             "optional": {
+                "output_dir": (
+                    "STRING",
+                    {"multiline": False, "default": "",
+                     "tooltip": "重命名后的输出目录：留空=在原文件夹内原地重命名；填了=把文件移动到该目录并以新名保存"},
+                ),
                 "only_extensions": (
                     "STRING",
                     {"multiline": False, "default": "",
@@ -445,9 +462,16 @@ class RenameFolderFiles:
     CATEGORY = "路径加载"
 
     def rename_files(self, folder, filename_prefix, middle_char, start_number,
-                     only_extensions="", pair_by_number=True, dry_run=True):
+                     output_dir="", only_extensions="", pair_by_number=True, dry_run=True):
         if not folder or not os.path.isdir(folder):
             raise FileNotFoundError(f"文件夹不存在: {folder}")
+
+        # 输出目录：留空=原地重命名；填了=移动到该目录
+        if output_dir and output_dir.strip():
+            dest_dir = os.path.abspath(output_dir.strip())
+            os.makedirs(dest_dir, exist_ok=True)
+        else:
+            dest_dir = folder
 
         sep = middle_char or ""
         ext_filter = set()
@@ -506,19 +530,24 @@ class RenameFolderFiles:
         if dups:
             raise ValueError("重命名后存在重复文件名(同扩展名冲突): " + ", ".join(sorted(dups)))
 
-        planned_old = {os.path.basename(o) for o, _ in plan}
+        planned_new = {n for _, n in plan}
         for o, n in plan:
-            if os.path.exists(os.path.join(folder, n)) and n not in planned_old:
+            if os.path.exists(os.path.join(dest_dir, n)) and n not in planned_new:
                 raise FileExistsError(
                     f"目标文件已存在(非本次重命名覆盖): {n}，请换个前缀或先备份。")
 
         # preview
         if dry_run:
-            lines = [f"{os.path.basename(o)}  ->  {n}" for o, n in plan]
-            lines.insert(0, f"[预览] 将重命名 {len(plan)} 个文件（未真正执行，关闭 dry_run 才会改名）:")
+            head = (f"[预览] 将重命名 {len(plan)} 个文件" +
+                    (f" 并移动到 {dest_dir}" if dest_dir != folder else "") +
+                    "（未真正执行，关闭 dry_run 才会改名）:")
+            lines = [head]
+            for o, n in plan:
+                lines.append(f"{os.path.basename(o)}  ->  {n}")
             return ("\n".join(lines),)
 
-        # execute in two passes (old -> temp -> final) to avoid name collisions
+        # execute: phase1 源文件 -> 源文件夹内的临时名（释放原文件名，避免同名互踩）
+        #          phase2 临时名 -> 目标目录/新名（支持跨目录移动）
         temps = []
         for i, (o, n) in enumerate(plan):
             ext = os.path.splitext(n)[1]
@@ -527,10 +556,11 @@ class RenameFolderFiles:
             temps.append((tmp, n))
         renamed = []
         for tmp, n in temps:
-            os.rename(tmp, os.path.join(folder, n))
+            os.rename(tmp, os.path.join(dest_dir, n))
             renamed.append(n)
 
-        return (f"已重命名 {len(renamed)} 个文件:\n" + "\n".join(renamed),)
+        dest_note = f" -> {dest_dir}" if dest_dir != folder else ""
+        return (f"已重命名 {len(renamed)} 个文件{dest_note}:\n" + "\n".join(renamed),)
 
 
 # Expose node list for __init__.py

@@ -60,8 +60,9 @@ pip install -r requirements.txt
 场景：文件夹里是成对的 `ComfyUI_1.jpg`+`ComfyUI_1.txt` … 想统一重命名为 `a_1.jpg`+`a_1.txt`、`a_2.*` …（图片也同样改名）。
 
 1. 新建 `重命名文件夹文件` 节点，`folder` 填该目录；`filename_prefix` 填 `a`、`middle_char` 填 `_`、`start_number` 填 `1`。
-2. **先保持 `dry_run=开`**，运行一次，看 `report` 输出是否如预期（例如 `ComfyUI_5.jpg -> a_5.jpg`、`ComfyUI_5.txt -> a_5.txt`）。
-3. 确认无误后把 `dry_run` 关掉再运行，即真正改名。
+2. **输出目录（可选）**：`output_dir` 留空 = 在原文件夹内**原地重命名**；填了某个目录 = 把文件**移动到该目录**并以新名保存（原文件夹里的同名原文件即被移走）。
+3. **先保持 `dry_run=开`**，运行一次，看 `report` 输出是否如预期（例如 `ComfyUI_5.jpg -> a_5.jpg`、`ComfyUI_5.txt -> a_5.txt`）。
+4. 确认无误后把 `dry_run` 关掉再运行，即真正改名。
 
 > 默认 `pair_by_number=开`：同编号的图片与文本会自动拿到同一个新编号，保证成对。若只想改某类文件，用 `only_extensions` 限定（如 `txt` 或 `jpg,png`）。重命名不可逆，建议先 `dry_run` 预览、`only_extensions` 限定范围，或在操作前备份文件夹。
 
