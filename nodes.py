@@ -391,12 +391,155 @@ class SaveTextFile:
         return (final_path,)
 
 
+# ---------------------------------------------------------------------------
+# Node 5: batch rename every file (image + text) in a folder, keep pairs
+# ---------------------------------------------------------------------------
+class RenameFolderFiles:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "folder": (
+                    "STRING",
+                    {"multiline": False, "default": "",
+                     "tooltip": "要重命名文件的文件夹路径"},
+                ),
+                "filename_prefix": (
+                    "STRING",
+                    {"multiline": False, "default": "a", "tooltip": "新文件名前缀，例如 a"},
+                ),
+                "middle_char": (
+                    "STRING",
+                    {"multiline": False, "default": "_",
+                     "tooltip": "前缀与编号之间的连接符，如 _ 或 -"},
+                ),
+                "start_number": (
+                    "INT",
+                    {"default": 1, "min": 0, "max": 999999, "step": 1,
+                     "tooltip": "编号起始值（重命名后从几开始）"},
+                ),
+            },
+            "optional": {
+                "only_extensions": (
+                    "STRING",
+                    {"multiline": False, "default": "",
+                     "tooltip": "只处理这些扩展名(逗号分隔，如 jpg,png,txt)；留空=处理全部文件"},
+                ),
+                "pair_by_number": (
+                    "BOOLEAN",
+                    {"default": True,
+                     "tooltip": "按原文件名里的数字配对：同编号的图片与文本使用同一个新编号（a_1.jpg + a_1.txt）；关闭则纯按文件名顺序重排"},
+                ),
+                "dry_run": (
+                    "BOOLEAN",
+                    {"default": True,
+                     "tooltip": "预览模式：只返回将要执行的重命名列表，不真正改名（建议先开着确认）"},
+                ),
+            },
+        }
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("report",)
+    FUNCTION = "rename_files"
+    OUTPUT_NODE = True
+    CATEGORY = "路径加载"
+
+    def rename_files(self, folder, filename_prefix, middle_char, start_number,
+                     only_extensions="", pair_by_number=True, dry_run=True):
+        if not folder or not os.path.isdir(folder):
+            raise FileNotFoundError(f"文件夹不存在: {folder}")
+
+        sep = middle_char or ""
+        ext_filter = set()
+        if only_extensions and only_extensions.strip():
+            ext_filter = {
+                ("." + e.strip().lower().lstrip("."))
+                for e in only_extensions.split(",") if e.strip()
+            }
+
+        files = []
+        for f in os.listdir(folder):
+            fp = os.path.join(folder, f)
+            if not os.path.isfile(fp):
+                continue
+            ext = os.path.splitext(f)[1].lower()
+            if ext_filter and ext not in ext_filter:
+                continue
+            files.append((f, ext))
+
+        if not files:
+            return ("没有匹配的文件。",)
+
+        # group files: by original number (so jpg+txt share a new number) or unique per file
+        raw_groups = {}
+        seq = 0
+        for f, ext in files:
+            num = _extract_number(f)
+            if pair_by_number and num is not None:
+                key = num
+            else:
+                key = ("__seq", seq)
+                seq += 1
+            raw_groups.setdefault(key, []).append((f, ext))
+
+        def sort_key(k):
+            return (0, k) if isinstance(k, int) else (1, k[1])
+
+        ordered_keys = sorted(raw_groups.keys(), key=sort_key)
+
+        # build rename plan: (old_path, new_name)
+        plan = []
+        for gi, key in enumerate(ordered_keys, start=int(start_number)):
+            new_num = gi
+            for f, ext in raw_groups[key]:
+                plan.append((os.path.join(folder, f),
+                             f"{filename_prefix}{sep}{new_num}{ext}"))
+
+        # collision checks
+        final_names = [n for _, n in plan]
+        seen = set()
+        dups = set()
+        for n in final_names:
+            if n in seen:
+                dups.add(n)
+            seen.add(n)
+        if dups:
+            raise ValueError("重命名后存在重复文件名(同扩展名冲突): " + ", ".join(sorted(dups)))
+
+        planned_old = {os.path.basename(o) for o, _ in plan}
+        for o, n in plan:
+            if os.path.exists(os.path.join(folder, n)) and n not in planned_old:
+                raise FileExistsError(
+                    f"目标文件已存在(非本次重命名覆盖): {n}，请换个前缀或先备份。")
+
+        # preview
+        if dry_run:
+            lines = [f"{os.path.basename(o)}  ->  {n}" for o, n in plan]
+            lines.insert(0, f"[预览] 将重命名 {len(plan)} 个文件（未真正执行，关闭 dry_run 才会改名）:")
+            return ("\n".join(lines),)
+
+        # execute in two passes (old -> temp -> final) to avoid name collisions
+        temps = []
+        for i, (o, n) in enumerate(plan):
+            ext = os.path.splitext(n)[1]
+            tmp = os.path.join(folder, f"__rn_{i}__{ext}")
+            os.rename(o, tmp)
+            temps.append((tmp, n))
+        renamed = []
+        for tmp, n in temps:
+            os.rename(tmp, os.path.join(folder, n))
+            renamed.append(n)
+
+        return (f"已重命名 {len(renamed)} 个文件:\n" + "\n".join(renamed),)
+
+
 # Expose node list for __init__.py
 NODE_CLASS_MAPPINGS = {
     "LoadImageByPath": LoadImageByPath,
     "LoadTextByPath": LoadTextByPath,
     "LoadImageAndTextByPath": LoadImageAndTextByPath,
     "SaveTextFile": SaveTextFile,
+    "RenameFolderFiles": RenameFolderFiles,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -404,4 +547,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "LoadTextByPath": "按路径加载文本",
     "LoadImageAndTextByPath": "按路径加载图像与文本",
     "SaveTextFile": "保存文本文件",
+    "RenameFolderFiles": "重命名文件夹文件",
 }
