@@ -431,6 +431,11 @@ class RenameFolderFiles:
                     {"default": 1, "min": 0, "max": 999999, "step": 1,
                      "tooltip": "编号起始值（重命名后从几开始）"},
                 ),
+                "number_padding": (
+                    "INT",
+                    {"default": 0, "min": 0, "max": 12, "step": 1,
+                     "tooltip": "数字补零位数：0=不补零(1,2,3)；2=补到2位(01,02…)；3=补到3位(001,002…)。上限12，比参考插件(was-node-suite)的9更高"},
+                ),
             },
             "optional": {
                 "output_dir": (
@@ -468,8 +473,8 @@ class RenameFolderFiles:
     CATEGORY = "路径加载"
 
     def rename_files(self, folder, filename_prefix, middle_char, start_number,
-                     output_dir="", only_extensions="", pair_by_number=True,
-                     dry_run=True, keep_original=False):
+                     number_padding=0, output_dir="", only_extensions="",
+                     pair_by_number=True, dry_run=True, keep_original=False):
         if not folder or not os.path.isdir(folder):
             raise FileNotFoundError(f"文件夹不存在: {folder}")
 
@@ -519,12 +524,14 @@ class RenameFolderFiles:
         ordered_keys = sorted(raw_groups.keys(), key=sort_key)
 
         # build rename plan: (old_path, new_name)
+        pad = max(0, int(number_padding))
         plan = []
         for gi, key in enumerate(ordered_keys, start=int(start_number)):
             new_num = gi
+            num_str = str(new_num).zfill(pad) if pad > 0 else str(new_num)
             for f, ext in raw_groups[key]:
                 plan.append((os.path.join(folder, f),
-                             f"{filename_prefix}{sep}{new_num}{ext}"))
+                             f"{filename_prefix}{sep}{num_str}{ext}"))
 
         # collision checks
         final_names = [n for _, n in plan]
