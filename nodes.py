@@ -8,6 +8,7 @@ Author: somerlttle
 """
 
 import os
+import re
 import glob
 import tempfile
 from datetime import datetime
@@ -26,6 +27,19 @@ except Exception:  # pragma: no cover - keeps module importable outside ComfyUI
 # Helpers
 # ---------------------------------------------------------------------------
 _IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tiff", ".tif")
+
+
+def _extract_number(path: str):
+    """Extract the trailing integer from a filename stem, e.g. ComfyUI_5 -> 5."""
+    stem = os.path.splitext(os.path.basename(path))[0]
+    digits = re.findall(r"\d+", stem)
+    return int(digits[-1]) if digits else None
+
+
+def _natural_sort_key(path: str):
+    """Sort key: numeric part first (so ComfyUI_2 < ComfyUI_10), then name."""
+    name = os.path.basename(path).lower()
+    return (_extract_number(path) or 0, name)
 
 
 def _load_single_image(path: str):
@@ -58,11 +72,11 @@ def _resolve_image_paths(image_path: str):
             for f in os.listdir(image_path)
             if f.lower().endswith(_IMAGE_EXTS)
         ]
-        return sorted(files)
+        return sorted(files, key=_natural_sort_key)
     if os.path.isfile(image_path):
         return [image_path]
     # support a single glob pattern, e.g. "D:/imgs/*.png"
-    matches = sorted(glob.glob(image_path))
+    matches = sorted(glob.glob(image_path), key=_natural_sort_key)
     matches = [m for m in matches if m.lower().endswith(_IMAGE_EXTS)]
     if matches:
         return matches
@@ -90,9 +104,9 @@ def _resolve_text_paths(text_path: str):
     """Return a sorted list of text file paths from a file, directory, or glob.
 
     - exact file            -> [that file]
-    - directory             -> all text-like files inside, sorted
+    - directory             -> all text-like files inside, sorted (natural/numeric)
     - bare name w/o ext     -> auto-append .txt if such a file exists
-    - glob (e.g. *.txt)     -> all matching files, sorted
+    - glob (e.g. *.txt)     -> all matching files, sorted (natural/numeric)
     """
     text_path = (text_path or "").strip()
     if not text_path:
@@ -103,14 +117,14 @@ def _resolve_text_paths(text_path: str):
             for f in os.listdir(text_path)
             if f.lower().endswith(_TEXT_EXTS)
         ]
-        return sorted(files)
+        return sorted(files, key=_natural_sort_key)
     if os.path.isfile(text_path):
         return [text_path]
     # auto-append .txt when the literal path has no extension but a .txt exists
     if not os.path.splitext(text_path)[1] and os.path.isfile(text_path + ".txt"):
         return [text_path + ".txt"]
     # support a glob pattern, e.g. "D:/datasets/*.txt"
-    matches = sorted(glob.glob(text_path))
+    matches = sorted(glob.glob(text_path), key=_natural_sort_key)
     matches = [m for m in matches if os.path.isfile(m)]
     if matches:
         return matches
@@ -163,7 +177,7 @@ class LoadImageByPath:
 
 
 # ---------------------------------------------------------------------------
-# Node 2: load text content by path
+# Node 2: load text content by path (per-file output, with file number)
 # ---------------------------------------------------------------------------
 class LoadTextByPath:
     @classmethod
@@ -173,35 +187,60 @@ class LoadTextByPath:
                 "text_path": (
                     "STRING",
                     {"multiline": False, "default": "",
-                     "tooltip": "文本文件路径 / 目录(加载其中全部文本) / glob 通配符；省略扩展名会自动补 .txt"},
+                     "tooltip": "文本文件路径 / 目录(逐文件加载其中全部文本) / glob 通配符；省略扩展名会自动补 .txt"},
                 ),
             },
             "optional": {
                 "strip_newline": (
                     "BOOLEAN",
-                    {"default": True, "tooltip": "Remove a single trailing newline"},
+                    {"default": True, "tooltip": "移除每个文件末尾单独的一行换行"},
+                ),
+                "output_each_file": (
+                    "BOOLEAN",
+                    {"default": True,
+                     "tooltip": "逐文件输出(开): 目录/多文件时每个文件单独输出并带 file_number；关则合并成一个字符串"},
                 ),
             },
         }
 
-    RETURN_TYPES = ("STRING",)
-    RETURN_NAMES = ("text",)
+    RETURN_TYPES = ("STRING", "INT", "STRING")
+    RETURN_NAMES = ("text", "file_number", "file_name")
     FUNCTION = "load_text"
     CATEGORY = "路径加载"
 
-    def load_text(self, text_path, strip_newline=True):
+    def load_text(self, text_path, strip_newline=True, output_each_file=True):
         paths = _resolve_text_paths(text_path)
         if not paths:
             hint = (
-                "支持：完整文件路径 / 目录(加载其中全部文本文件) / glob 通配符"
+                "支持：完整文件路径 / 目录(逐文件加载其中全部文本文件) / glob 通配符"
                 "(如 D:/datasets/*.txt)；若省略扩展名会自动尝试补 .txt"
             )
             raise FileNotFoundError(f"Text file not found: {text_path}\n{hint}")
-        chunks = [_read_text_file(p) for p in paths]
-        content = "\n\n".join(chunks)
-        if strip_newline and content.endswith("\n"):
-            content = content[:-1]
-        return (content,)
+
+        entries = []
+        for idx, p in enumerate(paths, start=1):
+            content = _read_text_file(p)
+            if strip_newline and content.endswith("\n"):
+                content = content[:-1]
+            num = _extract_number(p)
+            if num is None:
+                num = idx  # 文件名无数字时按序号 1,2,3... 编号
+            name = os.path.splitext(os.path.basename(p))[0]
+            entries.append((content, num, name))
+
+        # ----- 单文件 或 合并模式：返回标量 -----
+        if not output_each_file or len(entries) == 1:
+            if len(entries) == 1:
+                content, num, name = entries[0]
+                return (content, num, name)
+            content = "\n\n".join(e[0] for e in entries)
+            return (content, len(entries), text_path)
+
+        # ----- 逐文件模式：返回列表，ComfyUI 自动逐个迭代下游节点 -----
+        texts = [e[0] for e in entries]
+        nums = [e[1] for e in entries]
+        names = [e[2] for e in entries]
+        return (texts, nums, names)
 
 
 # ---------------------------------------------------------------------------
@@ -237,7 +276,9 @@ class LoadImageAndTextByPath:
         image, mask = img_node.load_image(image_path)
 
         txt_node = LoadTextByPath()
-        (text,) = txt_node.load_text(text_path, strip_newline)
+        # 合并模式：始终保持返回单个字符串文本
+        res = txt_node.load_text(text_path, strip_newline, output_each_file=False)
+        text = res[0]
 
         return (image, mask, text)
 
