@@ -10,6 +10,7 @@ Author: somerlttle
 import os
 import re
 import glob
+import shutil
 import tempfile
 from datetime import datetime
 
@@ -452,6 +453,11 @@ class RenameFolderFiles:
                     {"default": True,
                      "tooltip": "预览模式：只返回将要执行的重命名列表，不真正改名（建议先开着确认）"},
                 ),
+                "keep_original": (
+                    "BOOLEAN",
+                    {"default": False,
+                     "tooltip": "保留原文件：开启后【复制】而不是移动，源文件原样保留（同时多出一份新名字的文件）；关闭则原地改名（旧名字消失）"},
+                ),
             },
         }
 
@@ -462,7 +468,8 @@ class RenameFolderFiles:
     CATEGORY = "路径加载"
 
     def rename_files(self, folder, filename_prefix, middle_char, start_number,
-                     output_dir="", only_extensions="", pair_by_number=True, dry_run=True):
+                     output_dir="", only_extensions="", pair_by_number=True,
+                     dry_run=True, keep_original=False):
         if not folder or not os.path.isdir(folder):
             raise FileNotFoundError(f"文件夹不存在: {folder}")
 
@@ -538,29 +545,44 @@ class RenameFolderFiles:
 
         # preview
         if dry_run:
-            head = (f"[预览] 将重命名 {len(plan)} 个文件" +
-                    (f" 并移动到 {dest_dir}" if dest_dir != folder else "") +
-                    "（未真正执行，关闭 dry_run 才会改名）:")
+            op = "复制并保留原文件" if keep_original else "重命名(移动)"
+            head = (f"[预览] 将{op} {len(plan)} 个文件" +
+                    (f" 到 {dest_dir}" if dest_dir != folder else "") +
+                    "（未真正执行，关闭 dry_run 才会生效）:")
             lines = [head]
             for o, n in plan:
                 lines.append(f"{os.path.basename(o)}  ->  {n}")
+            if keep_original:
+                lines.append("（源文件将保留，不会被删除）")
             return ("\n".join(lines),)
 
-        # execute: phase1 源文件 -> 源文件夹内的临时名（释放原文件名，避免同名互踩）
-        #          phase2 临时名 -> 目标目录/新名（支持跨目录移动）
-        temps = []
-        for i, (o, n) in enumerate(plan):
-            ext = os.path.splitext(n)[1]
-            tmp = os.path.join(folder, f"__rn_{i}__{ext}")
-            os.rename(o, tmp)
-            temps.append((tmp, n))
-        renamed = []
-        for tmp, n in temps:
-            os.rename(tmp, os.path.join(dest_dir, n))
-            renamed.append(n)
+        # execute
+        if keep_original:
+            # 复制模式：源文件原样保留，复制一份到 目标目录/新名
+            copied = []
+            for o, n in plan:
+                dst = os.path.join(dest_dir, n)
+                shutil.copy2(o, dst)  # 复制并保留元数据
+                copied.append(n)
+            verb = "已复制(保留原文件)"
+        else:
+            # 移动模式：phase1 源文件 -> 源文件夹内临时名（释放原文件名，避免同名互踩）
+            #          phase2 临时名 -> 目标目录/新名（支持跨目录移动）
+            temps = []
+            for i, (o, n) in enumerate(plan):
+                ext = os.path.splitext(n)[1]
+                tmp = os.path.join(folder, f"__rn_{i}__{ext}")
+                os.rename(o, tmp)
+                temps.append((tmp, n))
+            renamed = []
+            for tmp, n in temps:
+                os.rename(tmp, os.path.join(dest_dir, n))
+                renamed.append(n)
+            copied = renamed
+            verb = "已重命名(移动)"
 
         dest_note = f" -> {dest_dir}" if dest_dir != folder else ""
-        return (f"已重命名 {len(renamed)} 个文件{dest_note}:\n" + "\n".join(renamed),)
+        return (f"{verb} {len(copied)} 个文件{dest_note}:\n" + "\n".join(copied),)
 
 
 # Expose node list for __init__.py
