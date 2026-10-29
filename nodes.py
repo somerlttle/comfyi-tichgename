@@ -83,6 +83,40 @@ def _read_text_file(path: str) -> str:
         return f.read().decode("utf-8", errors="replace")
 
 
+_TEXT_EXTS = (".txt", ".text", ".md", ".csv", ".json", ".prompt", ".caption")
+
+
+def _resolve_text_paths(text_path: str):
+    """Return a sorted list of text file paths from a file, directory, or glob.
+
+    - exact file            -> [that file]
+    - directory             -> all text-like files inside, sorted
+    - bare name w/o ext     -> auto-append .txt if such a file exists
+    - glob (e.g. *.txt)     -> all matching files, sorted
+    """
+    text_path = (text_path or "").strip()
+    if not text_path:
+        return []
+    if os.path.isdir(text_path):
+        files = [
+            os.path.join(text_path, f)
+            for f in os.listdir(text_path)
+            if f.lower().endswith(_TEXT_EXTS)
+        ]
+        return sorted(files)
+    if os.path.isfile(text_path):
+        return [text_path]
+    # auto-append .txt when the literal path has no extension but a .txt exists
+    if not os.path.splitext(text_path)[1] and os.path.isfile(text_path + ".txt"):
+        return [text_path + ".txt"]
+    # support a glob pattern, e.g. "D:/datasets/*.txt"
+    matches = sorted(glob.glob(text_path))
+    matches = [m for m in matches if os.path.isfile(m)]
+    if matches:
+        return matches
+    return []
+
+
 # ---------------------------------------------------------------------------
 # Node 1: load a single image (or all images in a directory) by path
 # ---------------------------------------------------------------------------
@@ -138,7 +172,8 @@ class LoadTextByPath:
             "required": {
                 "text_path": (
                     "STRING",
-                    {"multiline": False, "default": "", "tooltip": "Path to a .txt file"},
+                    {"multiline": False, "default": "",
+                     "tooltip": "文本文件路径 / 目录(加载其中全部文本) / glob 通配符；省略扩展名会自动补 .txt"},
                 ),
             },
             "optional": {
@@ -155,9 +190,15 @@ class LoadTextByPath:
     CATEGORY = "路径加载"
 
     def load_text(self, text_path, strip_newline=True):
-        if not os.path.isfile(text_path):
-            raise FileNotFoundError(f"Text file not found: {text_path}")
-        content = _read_text_file(text_path)
+        paths = _resolve_text_paths(text_path)
+        if not paths:
+            hint = (
+                "支持：完整文件路径 / 目录(加载其中全部文本文件) / glob 通配符"
+                "(如 D:/datasets/*.txt)；若省略扩展名会自动尝试补 .txt"
+            )
+            raise FileNotFoundError(f"Text file not found: {text_path}\n{hint}")
+        chunks = [_read_text_file(p) for p in paths]
+        content = "\n\n".join(chunks)
         if strip_newline and content.endswith("\n"):
             content = content[:-1]
         return (content,)
@@ -177,7 +218,8 @@ class LoadImageAndTextByPath:
                 ),
                 "text_path": (
                     "STRING",
-                    {"multiline": False, "default": "", "tooltip": "Path to a .txt file"},
+                    {"multiline": False, "default": "",
+                     "tooltip": "文本文件路径 / 目录(加载其中全部文本) / glob 通配符；省略扩展名会自动补 .txt"},
                 ),
             },
             "optional": {
